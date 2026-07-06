@@ -126,9 +126,14 @@ bot.on("message", async (ctx, next) => {
 
 // ── HTTP health server (keeps Render free tier alive) ─────────────────────────
 const PORT = Number(process.env.PORT ?? 3000);
-const server = http.createServer((_req, res) => {
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ ok: true, uptime: process.uptime() }));
+const server = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, uptime: process.uptime() }));
+  } else {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: false }));
+  }
 });
 server.listen(PORT, () => console.log(`🌐 Health server on port ${PORT}`));
 
