@@ -1,6 +1,6 @@
 import { Telegraf } from "telegraf";
 import type { Context } from "../context.js";
-import { config } from "../config.js";
+import { config, e } from "../config.js";
 import { adminTeamInline, cancelInline, mainMenuInline } from "../keyboards.js";
 import { clearWizard } from "../sessions.js";
 import { sendMainMenu } from "./menu.js";
@@ -23,9 +23,10 @@ export function registerTeamHandlers(bot: Telegraf<Context>) {
     ctx.session.teamStep = "experience";
     ctx.session.teamDraft = {};
     await ctx.editMessageText(
-      "🤝 <b>Заявка в команду</b>\n\n" +
-        "<b>Вопрос 1 из 3</b>\n\n" +
-        "💼 Есть ли у вас опыт в данной сфере? Если да — расскажите подробнее:",
+      `${e("hand","🤝")} <b>Заявка в команду</b>\n\n` +
+        `${e("brief","💼")} Расскажите немного о себе.\n\n` +
+        `<b>Шаг 1 из 3</b>\n` +
+        `${e("brief","💼")} Какой у вас опыт в данной сфере?`,
       { parse_mode: "HTML", reply_markup: cancelInline.reply_markup }
     );
   });
@@ -36,17 +37,16 @@ export async function handleTeamStep(ctx: Context): Promise<boolean> {
   if (!step) return false;
 
   const msg = ctx.message;
-  if (!msg || !("text" in msg)) return false;
-  const text = msg.text?.trim();
-  if (!text) return false;
+  if (!msg || !("text" in msg) || !msg.text) return false;
 
+  const text = msg.text.trim();
   const draft = ctx.session.teamDraft ?? {};
 
   if (step === "experience") {
     ctx.session.teamDraft = { ...draft, experience: text };
     ctx.session.teamStep = "source";
     await ctx.reply(
-      "<b>Вопрос 2 из 3</b>\n\n🔍 Откуда вы узнали о нас?",
+      `<b>Шаг 2 из 3</b>\n${e("num2","2️⃣")} Откуда вы узнали о нас?`,
       { parse_mode: "HTML", ...cancelInline }
     );
     return true;
@@ -56,7 +56,7 @@ export async function handleTeamStep(ctx: Context): Promise<boolean> {
     ctx.session.teamDraft = { ...draft, source: text };
     ctx.session.teamStep = "time";
     await ctx.reply(
-      "<b>Вопрос 3 из 3</b>\n\n⏰ Сколько времени в день готовы уделять работе?",
+      `<b>Шаг 3 из 3</b>\n${e("plane","✈️")} Сколько часов в день готовы уделять работе?`,
       { parse_mode: "HTML", ...cancelInline }
     );
     return true;
@@ -95,22 +95,20 @@ async function submitTeamRequest(ctx: Context) {
   clearWizard(ctx.session);
 
   await ctx.reply(
-    "✅ <b>Заявка в команду отправлена!</b>\n\n⏳ Ожидайте ответа администрации.",
+    `${e("ok","👍")} <b>Заявка в команду отправлена!</b>\n\n` +
+      `${e("plane","✈️")} Ожидайте ответа администрации.`,
     { parse_mode: "HTML", ...mainMenuInline }
   );
 
   const req = teamRequests.get(id)!;
   await ctx.telegram.sendMessage(
     config.adminId,
-    `📋 <b>Новая заявка в команду</b>\n\n` +
-      `👤 От: ${req.username}\n` +
+    `${e("hand","🤝")} <b>Новая заявка в команду</b>\n\n` +
+      `${e("worker","💁🏻‍♀️")} От: ${req.username}\n` +
       `🆔 ID: <code>${req.userId}</code>\n\n` +
-      `💼 Опыт:\n${req.experience}\n\n` +
+      `${e("brief","💼")} Опыт:\n${req.experience}\n\n` +
       `🔍 Откуда узнал:\n${req.source}\n\n` +
-      `⏰ Время в день:\n${req.time}`,
-    {
-      parse_mode: "HTML",
-      reply_markup: adminTeamInline(id).reply_markup,
-    }
+      `${e("plane","✈️")} Время в день:\n${req.time}`,
+    { parse_mode: "HTML", reply_markup: adminTeamInline(id).reply_markup }
   );
 }

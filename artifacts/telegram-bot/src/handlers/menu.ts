@@ -1,16 +1,15 @@
 import { Telegraf } from "telegraf";
 import type { Context } from "../context.js";
-import { config } from "../config.js";
+import { config, e } from "../config.js";
 import { getTopWorkers } from "../storage.js";
 import { cancelInline, mainMenuInline } from "../keyboards.js";
 import { clearWizard } from "../sessions.js";
 
-// Maps forwarded message_id (admin chat) → original user_id for support replies
 export const supportMap = new Map<number, number>();
 
-// ── Shared helper ─────────────────────────────────────────────────────────────
-export async function sendMainMenu(ctx: Context, text = "🏠 <b>Главное меню</b>") {
-  await ctx.reply(text, { parse_mode: "HTML", ...mainMenuInline });
+export async function sendMainMenu(ctx: Context, text?: string) {
+  const heading = text ?? `${e("bolt","⚡️")} <b>Главное меню</b>`;
+  await ctx.reply(heading, { parse_mode: "HTML", ...mainMenuInline });
 }
 
 export function registerMenuHandlers(bot: Telegraf<Context>) {
@@ -18,7 +17,10 @@ export function registerMenuHandlers(bot: Telegraf<Context>) {
   bot.start(async (ctx) => {
     if (ctx.chat.type !== "private") return;
     const name = ctx.from.first_name ?? "воркер";
-    await sendMainMenu(ctx, `👋 Привет, <b>${name}</b>!\n\nВыберите действие:`);
+    await sendMainMenu(
+      ctx,
+      `${e("bolt","⚡️")} Привет, <b>${name}</b>!\n\n${e("plane","✈️")} Выберите действие:`
+    );
   });
 
   // /menu
@@ -27,7 +29,7 @@ export function registerMenuHandlers(bot: Telegraf<Context>) {
     await sendMainMenu(ctx);
   });
 
-  // ── Cancel ────────────────────────────────────────────────────────────────
+  // ── Cancel ─────────────────────────────────────────────────────────────
   bot.action("cancel", async (ctx) => {
     clearWizard(ctx.session);
     await ctx.answerCbQuery("Отменено");
@@ -35,16 +37,16 @@ export function registerMenuHandlers(bot: Telegraf<Context>) {
     await sendMainMenu(ctx);
   });
 
-  // ── Statistics ────────────────────────────────────────────────────────────
+  // ── Statistics ──────────────────────────────────────────────────────────
   bot.action("menu:stats", async (ctx) => {
     await ctx.answerCbQuery();
     const top = getTopWorkers(100);
 
     if (top.length === 0) {
-      await ctx.editMessageText("📊 <b>Статистика</b>\n\nПока нет данных о выплатах.", {
-        parse_mode: "HTML",
-        reply_markup: mainMenuInline.reply_markup,
-      });
+      await ctx.editMessageText(
+        `${e("brief","💼")} <b>Статистика</b>\n\nПока нет данных о выплатах.`,
+        { parse_mode: "HTML", reply_markup: mainMenuInline.reply_markup }
+      );
       return;
     }
 
@@ -54,20 +56,24 @@ export function registerMenuHandlers(bot: Telegraf<Context>) {
       ? top.findIndex((w) => w.username.toLowerCase() === username.toLowerCase())
       : -1;
 
-    let text = `📊 <b>Статистика команды</b>\n\n`;
-    text += `👥 Всего воркеров: ${top.length}\n`;
-    text += `💰 Суммарный заработок: ${total.toFixed(2)} TON\n\n`;
+    const numEmojis = [
+      e("num1","1️⃣"), e("num2","2️⃣"), e("num3","3️⃣"), e("num4","4️⃣"),
+    ];
+
+    let text = `${e("brief","💼")} <b>Статистика команды</b>\n\n`;
+    text += `👥 Всего воркеров: <b>${top.length}</b>\n`;
+    text += `${e("money","💵")} Суммарный заработок: <b>${total.toFixed(2)} TON</b>\n\n`;
 
     if (myPos >= 0) {
       const me = top[myPos]!;
-      text += `🔹 Ваша позиция: #${myPos + 1}\n`;
-      text += `🔹 Ваш заработок: ${me.totalTon.toFixed(2)} TON (${me.payouts} выплат)\n\n`;
+      text += `${e("worker","💁🏻‍♀️")} Ваша позиция: <b>#${myPos + 1}</b>\n`;
+      text += `${e("money","💵")} Ваш заработок: <b>${me.totalTon.toFixed(2)} TON</b> (${me.payouts} выплат)\n\n`;
     }
 
-    const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
-    text += `👑 <b>Топ-5 воркеров:</b>\n`;
+    text += `${e("bolt","⚡️")} <b>Топ-5 воркеров:</b>\n`;
     top.slice(0, 5).forEach((w, i) => {
-      text += `${medals[i] ?? `${i + 1}.`} ${w.username} — ${w.totalTon.toFixed(2)} TON\n`;
+      const pos = numEmojis[i] ?? `${i + 1}.`;
+      text += `${pos} ${w.username} — <b>${w.totalTon.toFixed(2)} TON</b>\n`;
     });
 
     await ctx.editMessageText(text, {
@@ -76,23 +82,26 @@ export function registerMenuHandlers(bot: Telegraf<Context>) {
     });
   });
 
-  // ── Top workers ───────────────────────────────────────────────────────────
+  // ── Top workers ─────────────────────────────────────────────────────────
   bot.action("menu:top", async (ctx) => {
     await ctx.answerCbQuery();
     const top = getTopWorkers(100);
 
     if (top.length === 0) {
-      await ctx.editMessageText("👑 <b>Топ воркеров</b>\n\nПока нет данных.", {
-        parse_mode: "HTML",
-        reply_markup: mainMenuInline.reply_markup,
-      });
+      await ctx.editMessageText(
+        `${e("bolt","⚡️")} <b>Топ воркеров</b>\n\nПока нет данных.`,
+        { parse_mode: "HTML", reply_markup: mainMenuInline.reply_markup }
+      );
       return;
     }
 
-    const medals = ["🥇", "🥈", "🥉"];
-    let text = `👑 <b>Топ-${Math.min(top.length, 100)} воркеров</b>\n\n`;
+    const numEmojis = [
+      e("num1","1️⃣"), e("num2","2️⃣"), e("num3","3️⃣"), e("num4","4️⃣"),
+    ];
+
+    let text = `${e("bolt","⚡️")} <b>Топ-${Math.min(top.length, 100)} воркеров</b>\n\n`;
     top.slice(0, 100).forEach((w, i) => {
-      const pos = medals[i] ?? `${i + 1}.`;
+      const pos = numEmojis[i] ?? `${i + 1}.`;
       text += `${pos} ${w.username} — <b>${w.totalTon.toFixed(2)} TON</b> (${w.payouts} выплат)\n`;
     });
 
@@ -102,7 +111,7 @@ export function registerMenuHandlers(bot: Telegraf<Context>) {
     });
   });
 
-  // ── Rules ─────────────────────────────────────────────────────────────────
+  // ── Rules ───────────────────────────────────────────────────────────────
   bot.action("menu:rules", async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.editMessageText(config.rulesText, {
@@ -111,13 +120,43 @@ export function registerMenuHandlers(bot: Telegraf<Context>) {
     });
   });
 
-  // ── Support ───────────────────────────────────────────────────────────────
+  // ── Support wizard start ────────────────────────────────────────────────
   bot.action("menu:support", async (ctx) => {
     await ctx.answerCbQuery();
     ctx.session.supportStep = "waiting_message";
     await ctx.editMessageText(
-      "🆘 <b>Поддержка</b>\n\nНапишите ваш вопрос или опишите проблему — сообщение придёт администрации:",
+      `${e("doc","📃")} <b>Поддержка</b>\n\nНапишите ваш вопрос — администратор ответит вам в ближайшее время.`,
       { parse_mode: "HTML", reply_markup: cancelInline.reply_markup }
+    );
+  });
+
+  // ── Support message forwarding ──────────────────────────────────────────
+  bot.on("message", async (ctx, next) => {
+    if (ctx.session.supportStep !== "waiting_message") return next();
+    if (!("text" in ctx.message) || !ctx.message.text) {
+      await ctx.reply(`${e("doc","📃")} Напишите вопрос текстом:`, cancelInline);
+      return;
+    }
+
+    clearWizard(ctx.session);
+
+    const from = ctx.from;
+    const username = from.username ? `@${from.username}` : `id${from.id}`;
+    const text = ctx.message.text;
+
+    const forwarded = await ctx.telegram.sendMessage(
+      config.adminId,
+      `${e("doc","📃")} <b>Сообщение в поддержку</b>\n\n` +
+        `${e("worker","💁🏻‍♀️")} От: ${username} (<code>${from.id}</code>)\n\n` +
+        `${text}`,
+      { parse_mode: "HTML" }
+    );
+
+    supportMap.set(forwarded.message_id, from.id);
+
+    await ctx.reply(
+      `${e("ok","👍")} <b>Сообщение отправлено!</b>\n\nОжидайте ответа администратора.`,
+      { parse_mode: "HTML", ...mainMenuInline }
     );
   });
 }
