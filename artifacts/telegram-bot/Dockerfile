@@ -5,22 +5,16 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy workspace manifests first for layer caching
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY tsconfig.base.json tsconfig.json ./
+# Copy only the bot's own files — no monorepo context needed
+COPY artifacts/telegram-bot/package.json ./package.json
+COPY artifacts/telegram-bot/tsconfig.json ./tsconfig.json
+COPY artifacts/telegram-bot/src ./src
 
-# Copy only the bot package (no other artifacts needed)
-COPY artifacts/telegram-bot/package.json ./artifacts/telegram-bot/
-RUN pnpm install --frozen-lockfile --filter @workspace/telegram-bot
+# Install deps standalone (no workspace)
+RUN pnpm install --no-frozen-lockfile
 
-# Copy source
-COPY artifacts/telegram-bot ./artifacts/telegram-bot
-
-# Build (compile TS)
-RUN cd artifacts/telegram-bot && npx tsc
-
-# Run
-WORKDIR /app/artifacts/telegram-bot
 ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["node", "dist/index.js"]
+
+# Run directly with tsx — no compile step needed
+CMD ["node_modules/.bin/tsx", "src/index.ts"]

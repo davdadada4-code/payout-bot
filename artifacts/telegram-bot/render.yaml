@@ -1,13 +1,13 @@
 services:
   - type: web
-    name: telegram-bot
+    name: payout-bot
     runtime: docker
     dockerfilePath: ./artifacts/telegram-bot/Dockerfile
     dockerContext: .
     plan: free
     envVars:
       - key: BOT_TOKEN
-        sync: false          # enter manually in Render dashboard
+        sync: false
       - key: ADMIN_ID
         value: "7908632313"
       - key: PROFIT_CHAT_ID
