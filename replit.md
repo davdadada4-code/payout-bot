@@ -1,6 +1,6 @@
-# [Project name]
+# Payout Bot
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Telegram-бот для команды воркеров: приём заявок на выплату, уведомления админа, профит-сообщения с премиум-стикерами, статистика топ-100 воркеров, заявки в команду.
 
 ## Run & Operate
 
@@ -31,6 +31,29 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 ## Product
 
 _Describe the high-level user-facing capabilities of this app once they exist._
+
+## Telegram Bot
+
+### Запуск
+Workflow: **Telegram Bot** → `pnpm --filter @workspace/telegram-bot run dev`
+
+### Обязательные переменные окружения
+| Переменная | Описание |
+|---|---|
+| `BOT_TOKEN` | Токен от @BotFather |
+| `ADMIN_ID` | Ваш Telegram user ID (число). Узнать: @userinfobot |
+
+### Опциональные
+| Переменная | Описание |
+|---|---|
+| `BOT_USERNAME` | Username бота без @ |
+| `PROFIT_CHAT_ID` | ID чата для профит-сообщений (число со знаком −) |
+| `PROFIT_THREAD_ID` | ID ветки/топика в этом чате (0 = без ветки) |
+| `SUPPORT_LINK` | Ссылка на поддержку |
+| `RULES_TEXT` | Текст правил (HTML: `<b>`, `<i>`, `<code>`) |
+
+### Файл данных
+Статистика сохраняется в `data/stats.json` (создаётся автоматически).
 
 ## User preferences
 
