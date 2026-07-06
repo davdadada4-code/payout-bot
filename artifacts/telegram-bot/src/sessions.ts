@@ -32,9 +32,24 @@ export interface SessionData {
   teamStep?: TeamStep;
   teamDraft?: TeamDraft;
 
-  // Admin confirm flow: keyed by requestId
+  // Support wizard
+  supportStep?: "waiting_message";
+
+  // Admin confirm flow
   confirmStep?: ConfirmStep;
   confirmRequestId?: string;
   confirmWorkerUsername?: string;
   confirmAmount?: number;
+}
+
+export function clearWizard(session: SessionData): void {
+  session.payoutStep = undefined;
+  session.payoutDraft = undefined;
+  session.teamStep = undefined;
+  session.teamDraft = undefined;
+  session.supportStep = undefined;
+  session.confirmStep = undefined;
+  session.confirmRequestId = undefined;
+  session.confirmWorkerUsername = undefined;
+  session.confirmAmount = undefined;
 }

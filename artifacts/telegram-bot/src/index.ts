@@ -2,37 +2,44 @@ import { Telegraf, session } from "telegraf";
 import type { Context } from "./context.js";
 import type { SessionData } from "./sessions.js";
 import { config, validate } from "./config.js";
-import { registerMenuHandlers, supportMap } from "./handlers/menu.js";
+import { registerMenuHandlers, sendMainMenu, supportMap } from "./handlers/menu.js";
 import { registerPayoutHandlers, handlePayoutStep } from "./handlers/payout.js";
 import { registerTeamHandlers, handleTeamStep } from "./handlers/team.js";
 import { registerAdminHandlers, handleAdminConfirmStep } from "./handlers/admin.js";
+import { clearWizard } from "./sessions.js";
 
 validate();
 
 const bot = new Telegraf<Context>(config.botToken);
 
-// Session middleware
 bot.use(
   session<SessionData, Context>({
     defaultSession: () => ({}),
   })
 );
 
-// Register all handlers
 registerMenuHandlers(bot);
 registerPayoutHandlers(bot);
 registerTeamHandlers(bot);
 registerAdminHandlers(bot);
 
-// Wizard message dispatcher — runs after specific hears/actions
+// ── Message handler ────────────────────────────────────────────────────────────
 bot.on("message", async (ctx, next) => {
+  // Ignore ALL messages in groups/supergroups/channels — bot only works in DM
+  const chatType = ctx.chat?.type;
+  if (chatType !== "private") return;
+
   const msg = ctx.message;
   const fromId = ctx.from?.id;
 
-  // Admin reply to forwarded support message → relay back to user
-  if (fromId === config.adminId && msg && "reply_to_message" in msg && msg.reply_to_message) {
-    const replyToId = msg.reply_to_message.message_id;
-    const targetUserId = supportMap.get(replyToId);
+  // ── Admin: relay reply back to user who wrote support ─────────────────────
+  if (
+    fromId === config.adminId &&
+    msg &&
+    "reply_to_message" in msg &&
+    msg.reply_to_message
+  ) {
+    const targetUserId = supportMap.get(msg.reply_to_message.message_id);
     if (targetUserId) {
       const replyText = "text" in msg ? msg.text : undefined;
       if (replyText) {
@@ -47,17 +54,21 @@ bot.on("message", async (ctx, next) => {
     }
   }
 
-  // Admin confirm flow (amount entry after approval)
+  // ── Admin: enter payout amount after approval ─────────────────────────────
   if (await handleAdminConfirmStep(ctx)) return;
-  // Payout wizard
+
+  // ── Payout wizard steps ───────────────────────────────────────────────────
   if (await handlePayoutStep(ctx)) return;
-  // Team wizard
+
+  // ── Team wizard steps ─────────────────────────────────────────────────────
   if (await handleTeamStep(ctx)) return;
 
-  // Support forwarding — forward any user message to admin
-  if (fromId && fromId !== config.adminId) {
+  // ── Support: user typed message after clicking Поддержка button ───────────
+  if (ctx.session.supportStep === "waiting_message" && fromId !== config.adminId) {
+    ctx.session.supportStep = undefined;
+
     const from = ctx.from!;
-    const username = from.username ? `@${from.username}` : `${from.first_name ?? ""}`.trim();
+    const username = from.username ? `@${from.username}` : from.first_name ?? `id${from.id}`;
     const header = `🆘 <b>Сообщение в поддержку</b>\n👤 ${username} (<code>${from.id}</code>):`;
 
     let forwarded: { message_id: number } | null = null;
@@ -96,27 +107,28 @@ bot.on("message", async (ctx, next) => {
 
     if (forwarded) {
       supportMap.set(forwarded.message_id, from.id);
-      await ctx.reply(
-        "✅ Сообщение отправлено администрации. Ожидайте ответа.",
-        { ...{ reply_markup: { remove_keyboard: true } } }
-      );
     }
+
+    await ctx.reply(
+      "✅ Сообщение отправлено администрации. Ожидайте ответа.",
+      { parse_mode: "HTML" }
+    );
+    await sendMainMenu(ctx);
     return;
   }
 
+  // ── Fallback: show main menu ───────────────────────────────────────────────
+  clearWizard(ctx.session);
+  await sendMainMenu(ctx);
   return next();
 });
 
-// Graceful shutdown
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
 
-bot
-  .launch()
-  .then(() => {
-    console.log("✅ Bot started successfully");
-  })
-  .catch((err) => {
-    console.error("❌ Failed to start bot:", err);
-    process.exit(1);
-  });
+bot.launch().then(() => {
+  console.log("✅ Bot started");
+}).catch((err) => {
+  console.error("❌ Failed to start:", err);
+  process.exit(1);
+});

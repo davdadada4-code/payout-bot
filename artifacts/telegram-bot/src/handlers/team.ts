@@ -1,7 +1,9 @@
 import { Telegraf } from "telegraf";
 import type { Context } from "../context.js";
 import { config } from "../config.js";
-import { adminTeamInline, cancelKeyboard, mainMenu } from "../keyboards.js";
+import { adminTeamInline, cancelInline, mainMenuInline } from "../keyboards.js";
+import { clearWizard } from "../sessions.js";
+import { sendMainMenu } from "./menu.js";
 import { randomUUID } from "crypto";
 
 export const teamRequests = new Map<
@@ -16,12 +18,15 @@ export const teamRequests = new Map<
 >();
 
 export function registerTeamHandlers(bot: Telegraf<Context>) {
-  bot.hears("🤝 Заявка в команду", async (ctx) => {
+  bot.action("menu:team", async (ctx) => {
+    await ctx.answerCbQuery();
     ctx.session.teamStep = "experience";
     ctx.session.teamDraft = {};
-    await ctx.reply(
-      "🤝 <b>Заявка в команду</b>\n\n<b>Вопрос 1 из 3</b>\n\n💼 Есть ли у вас опыт в данной сфере? Если да — расскажите подробнее:",
-      { parse_mode: "HTML", ...cancelKeyboard }
+    await ctx.editMessageText(
+      "🤝 <b>Заявка в команду</b>\n\n" +
+        "<b>Вопрос 1 из 3</b>\n\n" +
+        "💼 Есть ли у вас опыт в данной сфере? Если да — расскажите подробнее:",
+      { parse_mode: "HTML", reply_markup: cancelInline.reply_markup }
     );
   });
 }
@@ -31,8 +36,8 @@ export async function handleTeamStep(ctx: Context): Promise<boolean> {
   if (!step) return false;
 
   const msg = ctx.message;
-  if (!msg) return false;
-  const text = "text" in msg ? msg.text?.trim() : undefined;
+  if (!msg || !("text" in msg)) return false;
+  const text = msg.text?.trim();
   if (!text) return false;
 
   const draft = ctx.session.teamDraft ?? {};
@@ -42,7 +47,7 @@ export async function handleTeamStep(ctx: Context): Promise<boolean> {
     ctx.session.teamStep = "source";
     await ctx.reply(
       "<b>Вопрос 2 из 3</b>\n\n🔍 Откуда вы узнали о нас?",
-      { parse_mode: "HTML", ...cancelKeyboard }
+      { parse_mode: "HTML", ...cancelInline }
     );
     return true;
   }
@@ -52,7 +57,7 @@ export async function handleTeamStep(ctx: Context): Promise<boolean> {
     ctx.session.teamStep = "time";
     await ctx.reply(
       "<b>Вопрос 3 из 3</b>\n\n⏰ Сколько времени в день готовы уделять работе?",
-      { parse_mode: "HTML", ...cancelKeyboard }
+      { parse_mode: "HTML", ...cancelInline }
     );
     return true;
   }
@@ -69,9 +74,9 @@ export async function handleTeamStep(ctx: Context): Promise<boolean> {
 async function submitTeamRequest(ctx: Context) {
   const draft = ctx.session.teamDraft;
   if (!draft?.experience || !draft?.source || !draft?.time) {
-    await ctx.reply("⚠️ Что-то пошло не так. Попробуйте заново.", { ...mainMenu });
-    ctx.session.teamStep = undefined;
-    ctx.session.teamDraft = undefined;
+    clearWizard(ctx.session);
+    await ctx.reply("⚠️ Что-то пошло не так. Попробуйте заново.");
+    await sendMainMenu(ctx);
     return;
   }
 
@@ -87,12 +92,11 @@ async function submitTeamRequest(ctx: Context) {
     time: draft.time,
   });
 
-  ctx.session.teamStep = undefined;
-  ctx.session.teamDraft = undefined;
+  clearWizard(ctx.session);
 
   await ctx.reply(
     "✅ <b>Заявка в команду отправлена!</b>\n\n⏳ Ожидайте ответа администрации.",
-    { parse_mode: "HTML", ...mainMenu }
+    { parse_mode: "HTML", ...mainMenuInline }
   );
 
   const req = teamRequests.get(id)!;

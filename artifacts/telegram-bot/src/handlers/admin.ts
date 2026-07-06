@@ -1,7 +1,8 @@
 import { Telegraf } from "telegraf";
 import type { Context } from "../context.js";
 import { config } from "../config.js";
-import { mainMenu } from "../keyboards.js";
+import { mainMenuInline } from "../keyboards.js";
+import { sendMainMenu } from "./menu.js";
 import { payoutRequests } from "./payout.js";
 import { teamRequests } from "./team.js";
 import { recordPayout } from "../storage.js";
@@ -231,8 +232,9 @@ export async function handleAdminConfirmStep(ctx: Context): Promise<boolean> {
       `✅ Готово! Профит-сообщение отправлено в чат.\n\n` +
         `└ Воркер: ${workerUsername}\n` +
         `└ Сумма: ${amount} TON → доля ${workerShare.toFixed(2)} TON (${workerPercent}%)`,
-      { ...mainMenu }
+      { parse_mode: "HTML", ...mainMenuInline }
     );
+    await sendMainMenu(ctx);
 
     return true;
   }
