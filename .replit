@@ -38,3 +38,10 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+ADMIN_ID = "7908632313"
+PROFIT_CHAT_ID = "-1003413725881"
+PROFIT_THREAD_ID = "9"

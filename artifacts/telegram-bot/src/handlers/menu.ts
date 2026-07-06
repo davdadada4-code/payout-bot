@@ -4,6 +4,10 @@ import { config } from "../config.js";
 import { getTopWorkers } from "../storage.js";
 import { mainMenu } from "../keyboards.js";
 
+// Maps forwarded message_id (in admin chat) → original user_id
+// So admin can reply to the forwarded message and bot relays it back
+export const supportMap = new Map<number, number>();
+
 export function registerMenuHandlers(bot: Telegraf<Context>) {
   // /start
   bot.start(async (ctx) => {
@@ -82,13 +86,5 @@ export function registerMenuHandlers(bot: Telegraf<Context>) {
   // Правила
   bot.hears("📖 Правила", async (ctx) => {
     await ctx.reply(config.rulesText, { parse_mode: "HTML", ...mainMenu });
-  });
-
-  // Поддержка
-  bot.hears("🆘 Поддержка", async (ctx) => {
-    await ctx.reply(
-      `🆘 <b>Поддержка</b>\n\nПо всем вопросам обращайтесь: ${config.supportLink}`,
-      { parse_mode: "HTML", ...mainMenu }
-    );
   });
 }

@@ -201,7 +201,6 @@ export async function handleAdminConfirmStep(ctx: Context): Promise<boolean> {
     const profitText =
       `${bolt} <b>Новый профит!</b>\n\n` +
       `${worker} Воркер: ${workerUsername}\n` +
-      `${botEmo} Бот: @${config.botUsername}\n` +
       `${gift} Снято NFT: 1 шт.\n\n` +
       `${card} Сумма: ${amount} TON\n` +
       `├ Процент выплаты: ${workerPercent}%\n` +
