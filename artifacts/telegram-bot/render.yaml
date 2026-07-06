@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: telegram-bot
+    runtime: docker
+    dockerfilePath: ./artifacts/telegram-bot/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: BOT_TOKEN
+        sync: false          # enter manually in Render dashboard
+      - key: ADMIN_ID
+        value: "7908632313"
+      - key: PROFIT_CHAT_ID
+        value: "-1003413725881"
+      - key: PROFIT_THREAD_ID
+        value: "9"
+    healthCheckPath: /health

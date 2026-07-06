@@ -1,4 +1,5 @@
 import { Telegraf, session } from "telegraf";
+import http from "http";
 import type { Context } from "./context.js";
 import type { SessionData } from "./sessions.js";
 import { config, validate } from "./config.js";
@@ -123,8 +124,16 @@ bot.on("message", async (ctx, next) => {
   return next();
 });
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+// ── HTTP health server (keeps Render free tier alive) ─────────────────────────
+const PORT = Number(process.env.PORT ?? 3000);
+const server = http.createServer((_req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, uptime: process.uptime() }));
+});
+server.listen(PORT, () => console.log(`🌐 Health server on port ${PORT}`));
+
+process.once("SIGINT", () => { bot.stop("SIGINT"); server.close(); });
+process.once("SIGTERM", () => { bot.stop("SIGTERM"); server.close(); });
 
 bot.launch().then(() => {
   console.log("✅ Bot started");
