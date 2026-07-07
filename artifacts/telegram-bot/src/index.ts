@@ -1,5 +1,6 @@
 import { Telegraf, session } from "telegraf";
 import http from "http";
+import https from "https";
 import type { Context } from "./context.js";
 import type { SessionData } from "./sessions.js";
 import { config, validate } from "./config.js";
@@ -55,8 +56,28 @@ const server = http.createServer((req, res) => {
 });
 server.listen(PORT, () => console.log(`🌐 Health server on port ${PORT}`));
 
-process.once("SIGINT",  () => { bot.stop("SIGINT");  server.close(); });
-process.once("SIGTERM", () => { bot.stop("SIGTERM"); server.close(); });
+// ── Self-ping: keeps Render free tier awake without any external service ──────
+// RENDER_EXTERNAL_URL is set automatically by Render (e.g. https://payout-bot-dw84.onrender.com)
+const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+let pingInterval: ReturnType<typeof setInterval> | undefined;
+
+if (SELF_URL) {
+  const pingUrl = `${SELF_URL}/health`;
+  const client = pingUrl.startsWith("https") ? https : http;
+
+  pingInterval = setInterval(() => {
+    client.get(pingUrl, (res) => {
+      console.log(`🔁 Self-ping → ${res.statusCode}`);
+    }).on("error", (err) => {
+      console.error("⚠️ Self-ping failed:", err.message);
+    });
+  }, 4 * 60 * 1000); // every 4 minutes
+
+  console.log(`🔁 Self-ping enabled → ${pingUrl}`);
+}
+
+process.once("SIGINT",  () => { if (pingInterval) clearInterval(pingInterval); bot.stop("SIGINT");  server.close(); });
+process.once("SIGTERM", () => { if (pingInterval) clearInterval(pingInterval); bot.stop("SIGTERM"); server.close(); });
 
 bot.launch().then(() => {
   console.log("✅ Bot started");
