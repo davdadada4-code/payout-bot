@@ -23,6 +23,19 @@ registerPayoutHandlers(bot);
 registerTeamHandlers(bot);
 registerAdminHandlers(bot);
 
+// ── Global error handler: log and continue, never crash on bad updates ────────
+bot.catch((err, ctx) => {
+  const e = err as { message?: string; response?: { error_code?: number } };
+  const code = e?.response?.error_code;
+  // 400 = stale callback query / message not modified — safe to ignore
+  // 403 = bot blocked by user — safe to ignore
+  if (code === 400 || code === 403) {
+    console.warn(`⚠️ Ignored Telegram error ${code}: ${e?.message}`);
+    return;
+  }
+  console.error("Unhandled bot error:", err);
+});
+
 bot.on("message", async (ctx, next) => {
   if (ctx.chat?.type !== "private") return;
   if (await handlePayoutStep(ctx)) return;
