@@ -4,7 +4,7 @@ import https from "https";
 import type { Context } from "./context.js";
 import type { SessionData } from "./sessions.js";
 import { config, validate } from "./config.js";
-import { registerMenuHandlers } from "./handlers/menu.js";
+import { registerMenuHandlers, sendMainMenu } from "./handlers/menu.js";
 import { registerPayoutHandlers, handlePayoutStep } from "./handlers/payout.js";
 import { registerTeamHandlers, handleTeamStep } from "./handlers/team.js";
 import { registerAdminHandlers } from "./handlers/admin.js";
@@ -15,73 +15,90 @@ validate();
 const bot = new Telegraf<Context>(config.botToken);
 
 bot.use(
-  session<SessionData, Context>({
-    defaultSession: () => ({}),
-  })
+  session<SessionData, Context>({ defaultSession: () => ({}) })
 );
 
-// Register all handlers (each module adds its own bot.action / bot.on listeners)
-registerMenuHandlers(bot);   // support wizard, cancel, stats, top, rules
-registerPayoutHandlers(bot); // payout wizard button actions
-registerTeamHandlers(bot);   // team wizard button actions
-registerAdminHandlers(bot);  // admin amount input, support reply, approve/reject
+registerMenuHandlers(bot);
+registerPayoutHandlers(bot);
+registerTeamHandlers(bot);
+registerAdminHandlers(bot);
 
-// ── Shared message handler: group filter + wizard text steps + fallback ───────
 bot.on("message", async (ctx, next) => {
-  // Bot only responds in DMs
   if (ctx.chat?.type !== "private") return;
-
-  // Payout wizard text/photo steps
   if (await handlePayoutStep(ctx)) return;
-
-  // Team wizard text steps
   if (await handleTeamStep(ctx)) return;
-
-  // Fallback: show main menu for any unhandled text
   clearWizard(ctx.session);
-  await import("./handlers/menu.js").then(({ sendMainMenu }) => sendMainMenu(ctx));
+  await sendMainMenu(ctx);
   return next();
 });
 
-// ── HTTP health server (keeps Render free tier alive) ─────────────────────────
-const PORT = Number(process.env.PORT ?? 3000);
-const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, uptime: process.uptime() }));
-  } else {
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: false }));
-  }
-});
-server.listen(PORT, () => console.log(`🌐 Health server on port ${PORT}`));
+// ─────────────────────────────────────────────────────────────────────────────
+const PORT     = Number(process.env.PORT ?? 3000);
+const SELF_URL = process.env.RENDER_EXTERNAL_URL; // auto-set by Render
 
-// ── Self-ping: keeps Render free tier awake without any external service ──────
-// RENDER_EXTERNAL_URL is set automatically by Render (e.g. https://payout-bot-dw84.onrender.com)
-const SELF_URL = process.env.RENDER_EXTERNAL_URL;
-let pingInterval: ReturnType<typeof setInterval> | undefined;
-
-if (SELF_URL) {
-  const pingUrl = `${SELF_URL}/health`;
-  const client = pingUrl.startsWith("https") ? https : http;
-
-  pingInterval = setInterval(() => {
-    client.get(pingUrl, (res) => {
-      console.log(`🔁 Self-ping → ${res.statusCode}`);
-    }).on("error", (err) => {
-      console.error("⚠️ Self-ping failed:", err.message);
-    });
-  }, 4 * 60 * 1000); // every 4 minutes
-
-  console.log(`🔁 Self-ping enabled → ${pingUrl}`);
+/** Creates HTTP server with /health + optional extra handler for webhook path */
+function makeServer(extra?: http.RequestListener): http.Server {
+  return http.createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, uptime: process.uptime() }));
+      return;
+    }
+    if (extra) {
+      extra(req, res);
+    } else {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false }));
+    }
+  });
 }
 
-process.once("SIGINT",  () => { if (pingInterval) clearInterval(pingInterval); bot.stop("SIGINT");  server.close(); });
-process.once("SIGTERM", () => { if (pingInterval) clearInterval(pingInterval); bot.stop("SIGTERM"); server.close(); });
+async function main() {
+  if (SELF_URL) {
+    // ── WEBHOOK MODE (Render) ────────────────────────────────────────────────
+    // Telegram pushes updates to us — no polling, no 409 conflict with local dev
+    const webhookPath    = `/webhook/${config.botToken}`;
+    const webhookHandler = await bot.createWebhook({ domain: SELF_URL, path: webhookPath });
 
-bot.launch().then(() => {
-  console.log("✅ Bot started");
-}).catch((err) => {
+    const server = makeServer(webhookHandler);
+    server.listen(PORT, () => console.log(`🌐 Server on port ${PORT}`));
+
+    // Self-ping every 4 min so Render free tier never sleeps
+    const pingUrl    = `${SELF_URL}/health`;
+    const httpClient = pingUrl.startsWith("https") ? https : http;
+    const pingTimer  = setInterval(() => {
+      httpClient.get(pingUrl, (res) => {
+        console.log(`🔁 Self-ping → ${res.statusCode}`);
+      }).on("error", (err) => {
+        console.error("⚠️ Self-ping failed:", err.message);
+      });
+    }, 4 * 60 * 1000);
+
+    console.log(`✅ Bot started in webhook mode`);
+    console.log(`🔁 Self-ping active → ${pingUrl}`);
+
+    const shutdown = (sig: string) => {
+      clearInterval(pingTimer);
+      bot.stop(sig);
+      server.close();
+    };
+    process.once("SIGINT",  () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
+
+  } else {
+    // ── POLLING MODE (local Replit dev) ──────────────────────────────────────
+    const server = makeServer();
+    server.listen(PORT, () => console.log(`🌐 Health server on port ${PORT}`));
+
+    bot.launch();
+    console.log("✅ Bot started in polling mode (local dev)");
+
+    process.once("SIGINT",  () => { bot.stop("SIGINT");  server.close(); });
+    process.once("SIGTERM", () => { bot.stop("SIGTERM"); server.close(); });
+  }
+}
+
+main().catch((err) => {
   console.error("❌ Failed to start:", err);
   process.exit(1);
 });
